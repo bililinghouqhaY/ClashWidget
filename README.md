@@ -96,4 +96,4 @@ ClashWidget/
 
 MIT License
 
-This project was built with Claude/Gemini using Vibe Coding techniques
+This project was built with DeepSeek-V4-Pro/Gemini using Vibe Coding techniques

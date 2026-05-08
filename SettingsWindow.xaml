@@ -5,11 +5,12 @@
         Background="#AAFFFFFF"
         Topmost="True"
         ResizeMode="NoResize"
-        Width="360" Height="370"
+        Width="360" Height="400"
         MouseLeftButtonDown="OnMouseLeftButtonDown">
 
     <Grid Margin="20,12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -95,5 +96,11 @@
                 </ControlTemplate>
             </Button.Template>
         </Button>
+
+        <!-- Version -->
+        <TextBlock Grid.Row="10" Text="Version 1.0.1"
+                   FontSize="11" Foreground="#FF1E293B"
+                   HorizontalAlignment="Center"
+                   Margin="0,16,0,0" />
     </Grid>
 </Window>

@@ -18,17 +18,23 @@ public class ClashApiService
     public ClashApiService(AppConfig config)
     {
         _testUrl = config.TestUrl;
-        _tokenQuery = $"?token={Uri.EscapeDataString(config.ApiSecret)}";
+
+        bool hasAuth = !string.IsNullOrWhiteSpace(config.ApiSecret);
+        _tokenQuery = hasAuth ? $"?token={Uri.EscapeDataString(config.ApiSecret)}" : "";
+
         _httpClient = new HttpClient
         {
             BaseAddress = new Uri(config.ApiBaseUrl),
             Timeout = TimeSpan.FromSeconds(5)
         };
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", config.ApiSecret);
+
+        if (hasAuth)
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", config.ApiSecret);
     }
 
-    private string WithToken(string path) => $"{path}{_tokenQuery}";
+    private string WithToken(string path) =>
+        _tokenQuery.Length > 0 ? $"{path}{_tokenQuery}" : path;
 
     public async Task<TrafficInfo?> GetTrafficAsync()
     {
@@ -100,29 +106,7 @@ public class ClashApiService
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
 
-            // First: ensure parent groups route through this proxy group
-            var proxies = await GetProxiesAsync();
-            if (proxies != null)
-            {
-                var skip = new HashSet<string> { "DIRECT", "REJECT", "REJECT-DROP" };
-                foreach (var g in proxies)
-                {
-                    if (g.Type == "Selector" && g.All != null
-                        && g.All.Contains(groupName)
-                        && g.Now != null && skip.Contains(g.Now))
-                    {
-                        var parentPayload = JsonSerializer.Serialize(new { name = groupName });
-                        using var parentContent = new StringContent(parentPayload,
-                            System.Text.Encoding.UTF8, "application/json");
-                        using var parentReq = new HttpRequestMessage(HttpMethod.Put,
-                            WithToken($"/proxies/{Uri.EscapeDataString(g.Name)}"))
-                        { Content = parentContent };
-                        await _httpClient.SendAsync(parentReq, cts.Token);
-                    }
-                }
-            }
-
-            // Then: switch the actual proxy within the group
+            // 1) Switch the proxy in the target group
             var payload = JsonSerializer.Serialize(new { name = proxyName });
             using var content = new StringContent(payload,
                 System.Text.Encoding.UTF8, "application/json");
@@ -131,19 +115,43 @@ public class ClashApiService
             { Content = content };
             using var response = await _httpClient.SendAsync(request, cts.Token);
 
-            if (response.IsSuccessStatusCode)
-            {
-                // Force close all connections to reconnect through the new proxy
-                try
-                {
-                    using var delReq = new HttpRequestMessage(HttpMethod.Delete,
-                        WithToken("/connections"));
-                    await _httpClient.SendAsync(delReq, cts.Token);
-                }
-                catch { }
-            }
+            if (!response.IsSuccessStatusCode) return false;
 
-            return response.IsSuccessStatusCode;
+            // 2) Reroute all parent service groups (🌍 国外媒体, 📲 电报 etc.)
+            //    that reference this proxy group, so traffic flows through the selection
+            try
+            {
+                var proxies = await GetProxiesAsync();
+                if (proxies != null)
+                {
+                    foreach (var g in proxies)
+                    {
+                        if (g.Type == "Selector" && g.Name != groupName
+                            && g.All?.Contains(groupName) == true)
+                        {
+                            using var parentC = new StringContent(
+                                JsonSerializer.Serialize(new { name = groupName }),
+                                System.Text.Encoding.UTF8, "application/json");
+                            using var parentReq = new HttpRequestMessage(HttpMethod.Put,
+                                WithToken($"/proxies/{Uri.EscapeDataString(g.Name)}"))
+                            { Content = parentC };
+                            await _httpClient.SendAsync(parentReq, cts.Token);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 3) Force close all connections to reconnect through new path
+            try
+            {
+                using var del = new HttpRequestMessage(HttpMethod.Delete,
+                    WithToken("/connections"));
+                await _httpClient.SendAsync(del, cts.Token);
+            }
+            catch { }
+
+            return true;
         }
         catch
         {
@@ -154,26 +162,35 @@ public class ClashApiService
     public (string? nodeName, string? groupName, List<string>? availableNodes) ExtractCurrentNode(
         ProxyGroupResponse? groupResponse, List<ProxyEntry>? proxiesList)
     {
-        var skipValues = new HashSet<string> { "DIRECT", "REJECT", "REJECT-DROP" };
-        var priorityNames = new[] { "🔰 选择节点", "Proxy", "🚀 自动选择", "♻️ 自动故障转移" };
-
         List<ProxyEntry>? entries = proxiesList ?? groupResponse?.Proxies;
         if (entries == null) return (null, null, null);
 
-        foreach (var name in priorityNames)
-        {
-            var match = entries.FirstOrDefault(p =>
-                p.Name == name && p.Now != null && !skipValues.Contains(p.Now));
-            if (match?.Now != null)
-                return (FixEmojiFlags(match.Now), match.Name, match.All);
-        }
+        var skipValues = new HashSet<string> { "DIRECT", "REJECT", "REJECT-DROP" };
 
-        var selector = entries.FirstOrDefault(p =>
-            p.Type == "Selector" && p.Now != null && !skipValues.Contains(p.Now));
-        if (selector?.Now != null)
-            return (FixEmojiFlags(selector.Now), selector.Name, selector.All);
+        // Keyword-based fuzzy matching for proxy selection groups.
+        // Works with: 🔰 选择节点 / 🌍 节点选择 / Proxy / 🚀 自动选择 / etc.
+        var keywords = new[] { "选择", "节点", "Proxy", "Auto", "Select", "自動" };
 
-        return (null, null, null);
+        var candidates = entries
+            .Where(p => p.Type == "Selector"
+                && p.Now != null
+                && !skipValues.Contains(p.Now)
+                && p.All is { Count: > 0 })
+            .ToList();
+
+        if (candidates.Count == 0) return (null, null, null);
+
+        // Prefer groups whose name contains at least one keyword,
+        // and among those, pick the one with the largest "all" list (richest proxy options).
+        var keywordMatches = candidates
+            .Where(p => keywords.Any(k => p.Name.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var best = keywordMatches.Count > 0
+            ? keywordMatches.MaxBy(p => p.All!.Count)!
+            : candidates.MaxBy(p => p.All!.Count)!;
+
+        return (FixEmojiFlags(best.Now!), best.Name, best.All);
     }
 
     public async Task<double> MeasureLatencyAsync()

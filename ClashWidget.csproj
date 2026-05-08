@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <RootNamespace>ClashWidget</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <AppHostFallbackUrl>https://dotnet.microsoft.com/download/dotnet/8.0/runtime/desktop/x64</AppHostFallbackUrl>
+  </PropertyGroup>
+
+</Project>

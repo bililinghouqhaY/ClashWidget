@@ -95,3 +95,5 @@ ClashWidget/
 ## 📄 开源协议
 
 MIT License
+
+This project was built with Claude/Gemini using Vibe Coding techniques

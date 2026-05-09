@@ -98,7 +98,7 @@
         </Button>
 
         <!-- Version -->
-        <TextBlock Grid.Row="10" Text="Version 1.0.1"
+        <TextBlock Grid.Row="10" Text="Version 1.0.2"
                    FontSize="11" Foreground="#FF1E293B"
                    HorizontalAlignment="Center"
                    Margin="0,16,0,0" />

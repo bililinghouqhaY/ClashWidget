@@ -22,14 +22,14 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     private DateTime _lastNodeFetchTime = DateTime.MinValue;
     private bool _isPolling;
     private string? _groupName;
-    private const int MaxHistoryPoints = 600;
+    private const int MaxHistoryPoints = 2000;
     private static readonly TimeSpan NodeFetchInterval = TimeSpan.FromSeconds(3);
 
     public MainViewModel()
     {
         var config = ConfigService.Load();
         _apiService = new ClashApiService(config);
-        _speedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _speedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
         _speedTimer.Tick += OnSpeedTimerTick;
     }
 

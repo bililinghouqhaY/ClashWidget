@@ -21,7 +21,7 @@
 
 ### 下载运行
 
-从 [Releases](././releases) 下载最新版本：
+从 [Releases](https://github.com/bililinghouqhaY/ClashWidget/releases) 下载最新版本：
 
 - `ClashWidget.exe`（完整版，155 MB）— 无需安装 .NET，Windows 10 / 11 x64 双击运行
 - `ClashWidget-lite.exe`（轻量版，~230 KB）— 需安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
